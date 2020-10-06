@@ -1,5 +1,8 @@
 # swagger-hose
-Squirt a bunch of swagger requests into an API just to get some base requests to start from
+
+*sWHARRGARBL*
+
+Squirt a bunch of swagger requests into an API just to get some base requests to start from.
 
 This is designed for those times when you've unearthed a large amount of API documentation and you want to quickly triage to something that you can authenticate with, and provide some basic default input on. e.g.
 
