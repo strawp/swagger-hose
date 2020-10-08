@@ -13,3 +13,10 @@ python swagger-hose.py -p orgid pentest -H X-Requested-By swagger-hose -m get,po
 The above command will take all JSON files in `~/working/data/swagger/` and for each one pick out all the `GET` and `POST` requests, assign the parameters `orgid` with the value `pentest` and `employeeKey` with `user1` for anywhere these occur, add in the request header `X-Requested-By: swagger-hose` and then proxy it through Burp on my own machine.
 
 Then in Burp I'll pick out any responses that aren't `40*` and have a further poke.
+
+## TODO
+
+ - [ ] Default values for variable types
+ - [ ] yaml support
+ - [ ] Test with something other than the swagger v2.0 files that I had on this one pentest I wrote this for
+
