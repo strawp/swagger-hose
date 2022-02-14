@@ -107,7 +107,7 @@ class ServiceDefinition( object ):
           query = {}
           body = {}
           print('Parameters:')
-          if 'parameters' in req:
+          if 'parameters' in req and req['parameters'] is not None:
             for p in req['parameters']:
               if self.requiredonly and 'required' in p and not p['required']: continue
               v = self.get_default_value( p['name'], p )
