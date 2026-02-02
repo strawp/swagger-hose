@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-import argparse, json, requests, glob, os, urllib3
+import argparse, json, requests, glob, os, urllib3, yaml
 urllib3.disable_warnings()
 
 class ServiceDefinition( object ):
 
   requiredonly = False
   params = {}
+  variables = {}
   definition = {}
   title = ''
   defaults = {
@@ -25,9 +26,16 @@ class ServiceDefinition( object ):
 
   def __init__( self, filename ):
     with open( filename ) as f:
-      self.definition = json.load(f)
+      data = f.read()
+      
+    if filename.endswith( '.json' ):
+      self.definition = json.loads(data)
+    else:
+      self.definition = yaml.safe_load(data)
+      
     if 'info' in self.definition and 'title' in self.definition['info']:
       self.title = self.definition['info']['title']
+
 
   def get_definition( self, ref ):
     if self.debug: print('Getting definition of ', ref )
@@ -75,9 +83,9 @@ class ServiceDefinition( object ):
         v = self.get_default_value( 'object', p )
     elif 'items' in p:
       if '$ref' in p['items']:
-        v = [self.get_example(p['items']['$ref'])]
+        v = json.dumps([self.get_example(p['items']['$ref'])])
       else:
-        v = [self.get_default_value('object',p['items'])]
+        v = json.dumps([self.get_default_value('object',p['items'])])
     elif p['type'] in self.defaults:
       
       v = self.defaults[p['type']]
@@ -86,12 +94,40 @@ class ServiceDefinition( object ):
     return v
 
   def do_requests( self ):
-    if 'schemes' in self.definition: 
-      schemes = self.definition['schemes']
-    else: 
-      schemes = ['https']
-    for scheme in schemes:
-      baseurl = scheme + '://' + self.definition['host'] + self.definition['basePath']
+    
+
+    baseurls = []
+    if 'openapi' in self.definition and int(self.definition['openapi'].split('.')[0]) >= 3:
+      
+      # OpenAPI 3+
+      for server in self.definition.get('servers'):
+        for k,v in server.get('variables',{}).items():
+          if not k in self.variables:
+            self.variables[k] = v.get('default')
+
+        print('Variables:')
+        for k,v in self.variables.items():
+          print(k + ':', v )
+
+
+        url = server.get('url')
+        for k,v in self.variables.items():
+          url = url.replace('{'+k+'}',v)
+        
+        baseurls.append( url )
+
+    else:
+      
+      # Swagger 2
+      if 'schemes' in self.definition: 
+        schemes = self.definition['schemes']
+      else: 
+        schemes = ['https']
+        for scheme in schemes:
+          baseurl = scheme + '://' + self.definition['host'] + self.definition['basePath']
+          baseurls.append( baseurl )
+
+    for baseurl in baseurls:
       for path, methods in self.definition['paths'].items():
         for method, req in methods.items():
           url = baseurl + path
@@ -110,7 +146,15 @@ class ServiceDefinition( object ):
           if 'parameters' in req and req['parameters'] is not None:
             for p in req['parameters']:
               if self.requiredonly and 'required' in p and not p['required']: continue
-              v = self.get_default_value( p['name'], p )
+              try:
+                if '$ref' in p:
+                  p = self.get_definition( p['$ref'] )
+                v = self.get_default_value( p['name'], p )
+              except Exception as e:
+                print( e )
+                print( p )
+                continue
+
               if p['in'] == 'query':
                 query[p['name']] = str(v)
               elif p['in'] == 'path':
@@ -127,6 +171,7 @@ class ServiceDefinition( object ):
 def main():
   parser = argparse.ArgumentParser(description="A command line tool for squirting a bunch of requests into an API")
   parser.add_argument("--parameter","-p", nargs=2, action="append", help="Parameter to set")
+  parser.add_argument("--variable","-v", nargs=2, action="append", help="Variable to set")
   parser.add_argument("--header","-H", nargs=2, action="append", type=str,  help="HTTP request header to set")
   parser.add_argument("--proxy", help="URL of proxy to send requests through")
   parser.add_argument("--allowedmethods", "-m", help="Comma-separated list of methods allowed. Default: all")
@@ -144,6 +189,12 @@ def main():
     print(args.parameter)
     for p in args.parameter:
       params[p[0]] = p[1]
+  
+  variables = {}
+  if args.variable:
+    print(args.variable)
+    for p in args.variable:
+      variables[p[0]] = p[1]
  
   headers = {}
   if args.header:
@@ -164,6 +215,7 @@ def main():
   for doc in files:
     service = ServiceDefinition( doc )
     service.params = params
+    service.variables = variables
     service.headers = headers
     service.allowedmethods = allowedmethods
     service.requiredonly = args.requiredonly
